@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#07111f">
+<title>OTC Divergence Scanner</title>
+<style>
+:root{color-scheme:dark;--bg:#07111f;--panel:#101e30;--line:#263a52;--muted:#9bb0c7;--green:#27d69a;--red:#ff647c;--blue:#64a9ff}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(145deg,#07111f,#0c1728);color:#edf5ff;font:15px system-ui,Arial,sans-serif}
+main{max-width:900px;margin:auto;padding:22px 15px 50px}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-size:clamp(24px,5vw,34px);margin:0}.sub{color:var(--muted);margin:6px 0 18px}
+.badge{border:1px solid #31516d;color:#9fcaff;padding:7px 11px;border-radius:20px;font-size:12px}
+.card{background:rgba(16,30,48,.96);border:1px solid var(--line);border-radius:16px;padding:17px;margin:13px 0;box-shadow:0 8px 30px #0003}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}button,.filebtn{border:0;border-radius:11px;padding:12px 15px;font-weight:700;background:#1e3854;color:white;cursor:pointer}
+button.primary{background:linear-gradient(90deg,#087d65,#16a77d)}button:active{transform:scale(.98)}
+input,select{background:#081625;color:#eef6ff;border:1px solid #36506b;border-radius:10px;padding:11px;max-width:100%}
+label{display:block;color:var(--muted);font-size:13px;margin:8px 0 5px}.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px}
+.tf{display:flex;gap:7px;flex-wrap:wrap}.tf label{margin:0;color:#d9e8f7;background:#0a1929;border:1px solid var(--line);border-radius:9px;padding:9px}
+.tf input{accent-color:#20c997}.hint{color:var(--muted);font-size:13px;line-height:1.5}
+.status{padding:10px 12px;background:#0a1929;border-radius:10px;color:#b8cce0;margin-top:10px}
+.results{display:grid;gap:9px}.signal{border:1px solid var(--line);border-left:5px solid var(--muted);border-radius:12px;padding:12px;background:#0a1929}
+.signal.bull{border-left-color:var(--green)}.signal.bear{border-left-color:var(--red)}.signal h3{margin:0 0 5px;font-size:16px}.signal p{margin:3px 0;color:#b8cce0;font-size:13px}
+.green{color:var(--green)}.red{color:var(--red)}.empty{color:var(--muted);text-align:center;padding:22px}
+footer{color:#7f96ad;font-size:12px;text-align:center;margin-top:25px}
+</style>
+</head>
+<body><main>
+<div class="top"><div><h1>OTC Divergence Scanner</h1><div class="sub">Escáner técnico RSI · divergencias alcistas y bajistas</div></div><span class="badge">SOLO LECTURA · NO OPERA</span></div>
+<section class="card">
+<h2 style="margin-top:0">1. Datos del gráfico</h2>
+<p class="hint">Para analizar tus velas OTC, expórtalas o cópialas a un CSV con columnas: <b>time,open,high,low,close</b>. Puedes cargar un archivo por temporalidad. El modo demostración solo prueba el escáner con datos ficticios.</p>
+<div class="controls">
+<div><label>Temporalidad del archivo</label><select id="tfUpload"><option>1m</option><option>5m</option><option>15m</option><option>30m</option><option>1h</option><option>4h</option></select></div>
+<div><label>Importar velas CSV</label><input id="csvFile" type="file" accept=".csv,text/csv"></div>
+</div>
+<div class="row" style="margin-top:12px"><button class="primary" id="demo">Cargar demo de prueba</button><button id="clear">Borrar datos</button><button id="scan">ESCANEAR TODO</button></div>
+<div class="status" id="status">Sin datos cargados. Importa un CSV o carga la demo.</div>
+</section>
+<section class="card">
+<h2 style="margin-top:0">2. Configuración del escáner</h2>
+<div class="controls">
+<div><label>RSI período</label><input id="period" type="number" min="2" max="50" value="14"></div>
+<div><label>Velas entre pivotes</label><input id="pivot" type="number" min="2" max="12" value="4"></div>
+<div><label>Máxima distancia entre pivotes</label><input id="distance" type="number" min="5" max="80" value="30"></div>
+</div>
+<label style="margin-top:14px">Temporalidades a escanear</label>
+<div class="tf">
+<label><input type="checkbox" class="tfcheck" value="1m" checked> 1m</label>
+<label><input type="checkbox" class="tfcheck" value="5m" checked> 5m</label>
+<label><input type="checkbox" class="tfcheck" value="15m" checked> 15m</label>
+<label><input type="checkbox" class="tfcheck" value="30m" checked> 30m</label>
+<label><input type="checkbox" class="tfcheck" value="1h" checked> 1h</label>
+<label><input type="checkbox" class="tfcheck" value="4h" checked> 4h</label>
+</div>
+</section>
+<section class="card">
+<div class="row" style="justify-content:space-between"><h2 style="margin:0">3. Resultados</h2><span class="badge" id="count">0 señales</span></div>
+<div class="results" id="results"><div class="empty">Aquí aparecerán las divergencias detectadas.</div></div>
+</section>
+<section class="card">
+<h3 style="margin-top:0">Cómo interpreta las señales</h3>
+<p class="hint"><b class="green">Divergencia alcista:</b> el precio marca un mínimo más bajo y el RSI un mínimo más alto.</p>
+<p class="hint"><b class="red">Divergencia bajista:</b> el precio marca un máximo más alto y el RSI un máximo más bajo.</p>
+<p class="hint">Se buscan pivotes confirmados; por eso la señal puede aparecer después del giro. No es una predicción ni garantiza resultados. Verifica siempre el gráfico original.</p>
+</section>
+<footer>Herramienta educativa. No se conecta a Pocket Option, no extrae datos privados y no ejecuta operaciones.</footer>
+</main>
+<script>
+const datasets={};
+const $=id=>document.getElementById(id);
+function setStatus(s){$('status').textContent=s}
+function parseCSV(text){
+ const lines=text.trim().split(/\r?\n/); if(lines.length<20) throw Error('El archivo necesita al menos 20 filas de velas.');
+ const split=line=>line.split(/[;,]/).map(x=>x.trim().replace(/^"|"$/g,''));
+ let head=split(lines[0]).map(x=>x.toLowerCase());
+ const idx=k=>head.indexOf(k);
+ let ti=idx('time'),oi=idx('open'),hi=idx('high'),li=idx('low'),ci=idx('close');
+ if([oi,hi,li,ci].some(x=>x<0)){head=['time','open','high','low','close'];ti=0;oi=1;hi=2;li=3;ci=4}
+ const out=[];
+ for(let i=1;i<lines.length;i++){const a=split(lines[i]);const n=j=>Number(a[j]);let c=n(ci),o=n(oi),h=n(hi),l=n(li);if([c,o,h,l].every(Number.isFinite))out.push({time:a[ti]||String(i),open:o,high:h,low:l,close:c})}
+ if(out.length<20)throw Error('No pude leer suficientes velas. Revisa los nombres de columnas y el separador.');
+ return out;
+}
+$('csvFile').addEventListener('change',async e=>{
+ const f=e.target.files[0];if(!f)return;
+ try{const tf=$('tfUpload').value;datasets[tf]=parseCSV(await f.text());setStatus(`${tf}: ${datasets[tf].length} velas cargadas correctamente.`)}
+ catch(err){setStatus('Error: '+err.message)}
+});
+function rsi(vals,p){
+ const a=Array(vals.length).fill(null);if(vals.length<=p)return a;
+ let gain=0,loss=0;for(let i=1;i<=p;i++){let d=vals[i]-vals[i-1];gain+=Math.max(d,0);loss+=Math.max(-d,0)}
+ let ag=gain/p,al=loss/p;a[p]=al===0?100:100-100/(1+ag/al);
+ for(let i=p+1;i<vals.length;i++){let d=vals[i]-vals[i-1];ag=(ag*(p-1)+Math.max(d,0))/p;al=(al*(p-1)+Math.max(-d,0))/p;a[i]=al===0?100:100-100/(1+ag/al)}
+ return a;
+}
+function pivots(arr,k,type){
+ const out=[];for(let i=k;i<arr.length-k;i++){let ok=true;for(let j=i-k;j<=i+k;j++){if(j===i)continue;if(type==='low'&&arr[j]<=arr[i])ok=false;if(type==='high'&&arr[j]>=arr[i])ok=false}if(ok)out.push(i)}return out;
+}
+function analyze(candles,tf){
+ const p=Math.max(2,Math.min(50,+$('period').value||14)),k=Math.max(2,Math.min(12,+$('pivot').value||4)),maxD=Math.max(5,+$('distance').value||30);
+ const close=candles.map(x=>x.close),rv=rsi(close,p),out=[];
+ for(const type of ['low','high']){
+  const price= candles.map(x=>type==='low'?x.low:x.high),ps=pivots(price,k,type).filter(i=>rv[i]!==null);
+  if(ps.length<2)continue;
+  const b=ps[ps.length-1],a=[...ps.slice(0,-1)].reverse().find(i=>b-i<=maxD);
+  if(a===undefined)continue;
+  const bull=type==='low'&&price[b]<price[a]&&rv[b]>rv[a];
+  const bear=type==='high'&&price[b]>price[a]&&rv[b]<rv[a];
+  if(bull||bear)out.push({tf,type:bull?'bull':'bear',a,b,priceA:price[a],priceB:price[b],rsiA:rv[a],rsiB:rv[b],time:candles[b].time});
+ }
+ return out;
+}
+function render(signals){
+ $('count').textContent=signals.length+' señales';
+ if(!signals.length){$('results').innerHTML='<div class="empty">No se detectaron divergencias confirmadas con estos parámetros.</div>';return}
+ $('results').innerHTML=signals.sort((a,b)=>b.b-a.b).map(s=>`<div class="signal ${s.type}"><h3>${s.type==='bull'?'▲ DIVERGENCIA ALCISTA':'▼ DIVERGENCIA BAJISTA'} · ${s.tf}</h3><p>RSI: ${s.rsiA.toFixed(1)} → ${s.rsiB.toFixed(1)} · Precio: ${s.priceA} → ${s.priceB}</p><p>Vela del segundo pivote: ${s.time}</p><p><b>${s.type==='bull'?'Posible impulso alcista':'Posible impulso bajista'}</b> · Confirmar en el gráfico.</p></div>`).join('');
+}
+$('scan').onclick=()=>{
+ const selected=[...document.querySelectorAll('.tfcheck:checked')].map(x=>x.value),signals=[];let used=0;
+ selected.forEach(tf=>{if(datasets[tf]){used++;signals.push(...analyze(datasets[tf],tf))}});
+ render(signals);setStatus(`Escaneo terminado. ${used} temporalidades con datos; ${signals.length} divergencias encontradas. ${used<selected.length?'Carga CSV para las temporalidades faltantes.':''}`);
+};
+$('clear').onclick=()=>{Object.keys(datasets).forEach(k=>delete datasets[k]);$('csvFile').value='';render([]);setStatus('Datos borrados.')};
+function demoData(){
+ let seed=17;const rnd=()=>{seed=(seed*9301+49297)%233280;return seed/233280};
+ let c=[],price=100;
+ for(let i=0;i<180;i++){let wave=Math.sin(i/8)*.35+Math.sin(i/19)*.18;price+=wave+(rnd()-.5)*.65;let open=price+(rnd()-.5)*.3,close=price+(rnd()-.5)*.55;let high=Math.max(open,close)+rnd()*.35,low=Math.min(open,close)-rnd()*.35;c.push({time:'Demo '+(i+1),open,high,low,close})}
+ // create a visible lower-low in price with a higher-low RSI is not guaranteed; demo is for testing import/scanner flow.
+ return c;
+}
+$('demo').onclick=()=>{datasets['1m']=demoData();datasets['5m']=demoData();setStatus('Datos ficticios cargados en 1m y 5m. Pulsa ESCANEAR TODO. No son precios OTC reales.')};
+</script></body></html>
